@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ATLAS_ENV=development
+      - MONGO_URL=mongodb://mongo:27017
+      - DB_NAME=atlas_dev
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - LEARNING_SYSTEM_ARTIFACT_ROOT=/app/learning_system/artifacts
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./libs/python:/app/libs/python
+      - model_artifacts:/app/learning_system/artifacts
+    depends_on:
+      - mongo
+      - redis
+      - minio
+
+  worker:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A apps.api.worker.celery_app worker --loglevel=info
+    environment:
+      - ATLAS_ENV=development
+      - MONGO_URL=mongodb://mongo:27017
+      - DB_NAME=atlas_dev
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - LEARNING_SYSTEM_ARTIFACT_ROOT=/app/learning_system/artifacts
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./libs/python:/app/libs/python
+      - model_artifacts:/app/learning_system/artifacts
+    depends_on:
+      - mongo
+      - redis
+      - minio
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - WDS_SOCKET_PORT=0
+      - REACT_APP_BACKEND_URL=http://localhost:8000
+      - API_PROXY_TARGET=http://api:8000
+    volumes:
+      - ./apps/web/src:/app/src
+    depends_on:
+      - api
+
+  mongo:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+
+volumes:
+  mongo_data:
+  minio_data:
+  model_artifacts:
+
+

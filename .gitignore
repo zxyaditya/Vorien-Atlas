@@ -1,0 +1,185 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# IDE and editors
+.idea/
+.vscode/
+
+# Dependencies
+node_modules/
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Testing
+/coverage
+
+# Next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Production builds
+/build
+dist/
+dist
+
+# Environment files (comprehensive coverage)
+
+*token.json*
+*credentials.json*
+
+# Logs and debug files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+dump.rdb
+
+# System files
+.DS_Store
+*.pem
+
+# Python
+__pycache__/
+*pyc*
+venv/
+.venv/
+
+# Development tools
+chainlit.md
+.chainlit
+.ipynb_checkpoints/
+.ac
+
+# Deployment
+.vercel
+
+# Data and databases
+agenthub/agents/youtube/db
+
+# Archive files and large assets
+**/*.zip
+**/*.tar.gz
+**/*.tar
+**/*.tgz
+*.pack
+*.deb
+*.dylib
+
+# Build caches
+.cache/
+
+memory/test_credentials.md
+
+# Mobile development
+android-sdk/
+.env
+.env.*
+*.env
+credentials.json
+*.key
+.credentials
+
+# Machine Learning Artifacts
+*.pkl
+backend/learning_system/artifacts/
+
+# Test Outputs
+test_reports/
+test_result.md
+*_verification_report.md
+*_verification_test.py
+_v0*.py
+
+# Temporary Logs & Output
+*.log
+*_output.txt
+
+# IDE / Agent Caches
+.claude/
+.plan_cache.md
+
+# Stale Reports
+*REPORT.md
+
+# Allow environment templates
+!.env.example
+
+# Scratch & Temporary Patch Files
+fix*.py
+patch*.py
+patch_*.py
+temp.py
+sol.cpp
+audit*.py
+audit_results.json
+fetch_logs.py
+generate_audit.py
+generate_docs.py
+setup_git.ps1
+verification_report_raw.txt
+verify_features.py
+cloudflared.exe
+curl_out.*
+ohlcv.json
+query
+stop
+
+# Large model artifacts in atlasnew
+atlasnew/libs/python/learning_system/artifacts/
+atlasnew/libs/python/futures_learning_system/artifacts/
+atlasnew/libs/python/options_learning_system/artifacts/
+
+# Large files (>50MB) - excluded from git
+cloudflared.exe
+atlasnew/libs/python/learning_system/artifacts/data/*.parquet
+
+AGENTIC_LOOPS_MASTERY_ROADMAP.md
+
+# Root-level folders not part of atlasnew platform
+.emergent/
+memory/
+scripts/
+sdk/
+vorien_web/
+
+# Pytest artifacts
+.coverage
+.pytest_cache/
+# Root compose & config files kept local only
+.gitconfig
+docker-compose.prod.yml
+docker-compose.yml
+# Build outputs
+build/
+atlasnew/build/
+dist/
+
+# Batch scripts and pitch demos
+start_pitch.bat
+atlasnew/start_pitch.bat
+
+# Data stores and market data binary dumps
+*.parquet
+*.h5
+*.feather
+*.pkl
+atlasnew/libs/python/*/artifacts/data/
+atlasnew/libs/python/*/data/store/
+atlasnew/test_suite/
+
+already_decay_script.py
+alpha_decay_script.py
+
+# Internal Agent Configuration & Instructions
+.agents/
+AGENTS.md
+.gemini/
+agentic_loops*

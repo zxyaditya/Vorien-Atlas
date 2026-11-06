@@ -1,0 +1,48 @@
+# Node
+apps/web/node_modules
+apps/web/build
+apps/web/.cache
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache
+**/*.egg-info
+**/.eggs
+**/dist-info
+
+# Git
+.git
+.gitconfig
+.gitignore
+.github
+
+# Dev artifacts
+**/*.log
+**/.env.local
+**/.DS_Store
+
+# Large data files
+**/*.json.bak
+ohlcv.json
+audit_results.json
+verification_report_raw.txt
+curl_out.json
+curl_out.txt
+
+# Test / research dirs
+tests/
+test_suite/
+research/
+docs/
+
+# Fix scripts (not needed in container)
+fix*.py
+patch*.py
+generate_*.py
+verify_*.py
+audit*.py
+fetch_logs.py
+temp.py

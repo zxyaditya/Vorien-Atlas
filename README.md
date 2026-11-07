@@ -173,6 +173,14 @@ We highly value your bug reports, feature suggestions, and contributions!
 
 ---
 
-## License
+## License & Dual Licensing
 
-This project is licensed under the **Apache License, Version 2.0**. See the [LICENSE](./LICENSE) file for details.
+Vorien Atlas is dual-licensed under the **PolyForm Noncommercial License 1.0.0**:
+
+- **Personal, Academic & Research Use**: 100% Free to use, study, explore, modify, and build personal quantitative models.
+- **Commercial & Institutional Use**: Any deployment by hedge funds, proprietary trading firms, commercial enterprises, or for trading live capital for monetary compensation requires a commercial license agreement.
+
+For institutional inquiries, enterprise licensing, or commercial clearance, please contact:  
+**Aditya Yadav** (`@zxyaditya`) — `adityakumar93416@gmail.com`
+
+See the full [LICENSE](./LICENSE) file for complete legal terms.

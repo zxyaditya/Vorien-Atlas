@@ -43,7 +43,7 @@ Atlas provides an end-to-end quantitative pipeline out-of-the-box:
 3. **Machine Learning Pipelines:** Train and register tabular models (**XGBoost**, **LightGBM**, **RandomForest**) and sequence architectures (**PyTorch LSTM**, **Transformer**, **Temporal Fusion Transformer (TFT)**) with combinatorial purged cross-validation to prevent autocorrelation leakage.
 4. **Event-Driven Backtesting:** Simulate historical execution with realistic maker/taker commission schedules, volume-weighted adverse slippage, and Kelly-criterion position sizing.
 5. **Autonomous Decision Engine & Paper Execution:** Route market representations through **22 regime-conditional signal voters** and execute simulated live trades in an isolated paper trading ledger with mark-to-market accounting.
-6. **Interactive Visual Terminal:** Monitor real-time charts, model predictions, feature distributions, and equity curves inside a high-speed React 19 terminal interface.
+6. **Interactive Visual Terminals & Execution Daemons:** Monitor real-time charts, model predictions, feature distributions, and continuous paper execution across dedicated workspaces: Home Workspace, Feature Registry, Model Laboratory, **Futures & Perpetuals Terminal**, and **Options Vol Surface & Greeks Terminal**.
 
 ---
 
@@ -153,7 +153,7 @@ Full architectural and mathematical documentation lives in [`docs/`](./docs/):
 
 - [`docs/GETTING_STARTED.md`](./docs/GETTING_STARTED.md) — Complete end-to-end developer walkthrough with working code examples
 - [`docs/README.md`](./docs/README.md) — System overview, invariants, and architecture diagram
-- [`docs/FEATURE_HIERARCHY.md`](./docs/FEATURE_HIERARCHY.md) — Complete 925-feature mathematical taxonomy
+- [`docs/FEATURE_HIERARCHY.md`](./docs/FEATURE_HIERARCHY.md) — Complete 1,039-feature mathematical taxonomy (925 Core + 114 Derivatives extensions)
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — Distributed infrastructure, service topology, and network layer
 - [`docs/DECISION_ENGINE.md`](./docs/DECISION_ENGINE.md) — 22 signal extractors, voter mechanics, and K-NN analogues
 - [`docs/LEARNING_SYSTEM.md`](./docs/LEARNING_SYSTEM.md) — ML lifecycle, purged cross-validation, and neural models

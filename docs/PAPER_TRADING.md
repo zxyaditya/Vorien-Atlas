@@ -47,6 +47,30 @@ The platform computes a suite of trade metrics including:
 - `GET /api/paper/analytics` — Fetch aggregated performance metrics.
 - `POST /api/paper/positions/mark` — Force mark-to-market sync.
 - `POST /api/paper/account/reset` — Reset the paper trading database entirely.
+- `GET /api/daemons/status` — Running status and PIDs of managed background execution daemons.
+- `POST /api/daemons/{daemon_name}/toggle` — Start or gracefully terminate an autonomous daemon (`futures-paper`, `options-paper`, `stat-arb`, `whale-hunter`).
+- `GET /api/futures/paper-state` — Real-time telemetry, cash balance, equity history, and trade audit trail for the Futures Engine.
+- `GET /api/futures/logs` — Live log tail directly from `futures_paper_daemon.log`.
+- `GET /api/futures/model-spec` — Active XGBoost model architecture, 69 feature groups, and triple-barrier policy parameters.
+- `GET /api/options/portfolio` — Real-time Deribit options positions, enriched mark-to-market PnL, and exchange connectivity state.
+- `GET /api/options/logs` — Live log tail directly from `options_paper_daemon.log`.
+- `GET /api/options/model-spec` — Dual-model spec (Spot direction & Vol expansion classifiers) across 45 options features.
 
-## Connecting to Live Market Data
-Currently, the system is designed to use pulled market data. The `/api/paper/positions/mark` endpoint acts as the trigger for updating unrealized PnL. To connect to a live feed, an external daemon (or a future built-in Celery worker) must continuously poll the live broker or WebSocket stream and push the updated prices into the engine's mark-to-market function.
+## Autonomous Continuous Execution Daemons
+
+Atlas includes fully autonomous background daemons designed to execute live paper trading without manual intervention:
+
+1. **`futures_paper_daemon.py` (`apps/api/futures_paper_daemon.py`)**:
+   - Runs continuously on a 5-minute cycle aligned to Binance candle closes.
+   - Fetches live orderbook microstructure, Level 2 depth, CVD flow, and funding rates.
+   - Computes the 69 futures feature dimensions and runs XGBoost ML inference ($P(\text{UP})$).
+   - Enforces VPIN toxicity circuit breakers: rejects new entries if $\text{VPIN} > 0.70$ and triggers an immediate emergency close if $\text{VPIN} > 0.85$ during an active position (`toxicity_spike`).
+   - Persists execution state to `futures_paper_state.json`.
+
+2. **`options_paper_daemon.py` (`apps/api/options_paper_daemon.py`)**:
+   - Continuously monitors Deribit options chains and Binance underlying spot data.
+   - Computes Black-Scholes Greeks, 25-delta smile skew, and dealer GEX.
+   - Executes volatility arbitrage with dynamic VPIN vega scaling and $2.0\times \text{ATR}$ adaptive trailing stops.
+   - Persists state to `options_data_cache/paper_portfolio_state.json`.
+
+Both daemons are monitored and controlled directly from the **Futures & Perpetuals Terminal** and **Options Vol Surface & Greeks** workspaces in the React 19 web application.

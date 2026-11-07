@@ -72,22 +72,35 @@ def _clean(obj):
         return [_clean(v) for v in obj.tolist()]
     return obj
 # ═══════════════ Registry endpoints ═══════════════
+from derivatives_registry import ALL_DERIVATIVES_FEATURES, FUTURES_FEATURES, OPTIONS_FEATURES
+
 @api.get("/")
 async def root():
+    st = await registry_stats()
     return {"app": "Atlas Terminal", "version": "1.0.0",
-            "registered_features": registry.stats()["total"]}
+            "registered_features": st["total"], "spot_core": st.get("spot_core_total", 925),
+            "derivatives": st.get("derivatives_total", 114)}
+
 @api.get("/registry/stats")
 async def registry_stats():
-    stats = registry.stats()
-    # Filter out internal IP modules for public stats
-    internal_modules = {"whale_microstructure", "stat_arb_features", "derivatives"}
-    # Adjust total count
-    internal_count = sum(stats["by_module"].get(m, 0) for m in internal_modules)
-    stats["total"] -= internal_count
-    # Remove from by_module
-    for m in internal_modules:
-        stats["by_module"].pop(m, None)
-    return stats
+    base = dict(registry.stats())
+    base["spot_core_total"] = base["total"]
+    base["derivatives_total"] = len(ALL_DERIVATIVES_FEATURES)
+    base["total"] = base["spot_core_total"] + base["derivatives_total"]
+    
+    # Layer 5 for derivatives
+    by_layer = dict(base.get("by_layer", {}))
+    by_layer[5] = len(ALL_DERIVATIVES_FEATURES)
+    by_layer["5"] = len(ALL_DERIVATIVES_FEATURES)
+    base["by_layer"] = by_layer
+    
+    by_module = dict(base.get("by_module", {}))
+    by_module["futures"] = len(FUTURES_FEATURES)
+    by_module["options"] = len(OPTIONS_FEATURES)
+    base["by_module"] = by_module
+    
+    return base
+
 @api.get("/registry/features")
 async def registry_features(
     layer: Optional[int] = None,
@@ -96,26 +109,49 @@ async def registry_features(
     family: Optional[str] = None,
     q: Optional[str] = None,
 ):
-    feats = list_features(layer=layer, module=module, perspective=perspective,
-                          family=family)
-    # Filter out internal IP modules
-    internal_modules = {"whale_microstructure", "stat_arb_features", "derivatives"}
-    feats = [f for f in feats if f.module not in internal_modules]
+    core_feats = []
+    if layer is None or layer in (1, 2, 3, 4):
+        feats = list_features(layer=layer, module=module, perspective=perspective, family=family)
+        core_feats = [f.to_public_dict() for f in feats]
+
+    deriv_feats = []
+    if layer is None or layer == 5:
+        for df in ALL_DERIVATIVES_FEATURES:
+            if module and df["module"] != module:
+                continue
+            if perspective and df["perspective"] != perspective:
+                continue
+            if family and df["family"] != family:
+                continue
+            deriv_feats.append(df)
+
+    all_feats = core_feats + deriv_feats
     if q:
         ql = q.lower()
-        feats = [f for f in feats if ql in f.id.lower() or ql in f.name.lower()]
-    return [f.to_public_dict() for f in feats]
+        all_feats = [f for f in all_feats if ql in f["id"].lower() or ql in f["name"].lower()]
+    return all_feats
+
 @api.get("/registry/features/{feature_id}")
 async def registry_feature(feature_id: str):
+    for df in ALL_DERIVATIVES_FEATURES:
+        if df["id"] == feature_id:
+            return df
     try:
         f = registry.get(feature_id)
+        return f.to_public_dict()
     except KeyError:
         raise HTTPException(404, f"Feature '{feature_id}' not found")
-    return f.to_public_dict()
+
 @api.get("/registry/vocab")
 async def registry_vocab():
     from atlas_core.registry.registry import LAYERS, PERSPECTIVES
-    return {"layers": LAYERS, "perspectives": PERSPECTIVES}
+    layers_dict = dict(LAYERS)
+    layers_dict[5] = "L5 Derivatives: Futures & Options"
+    perspectives_list = list(PERSPECTIVES)
+    for p in ["Greeks", "Volatility"]:
+        if p not in perspectives_list:
+            perspectives_list.append(p)
+    return {"layers": layers_dict, "perspectives": perspectives_list}
 # ═══════════════ Peer context helper (DEC-007) ═══════════════
 def _fetch_peer_context(peer_provider: Optional[str], peer_symbol: Optional[str],
                          interval: str, period: str, target_index) -> Optional[dict]:
@@ -336,25 +372,53 @@ async def predict_train(req: TrainRequest):
         })
         # Register the model to the Model Registry only if there's no error
         if "error" not in result:
-            model_id = f"{req.model}_{req.symbol}_{req.horizon}"
+            import uuid
+            model_id = f"{req.model}_{req.symbol}_{req.horizon}_{uuid.uuid4().hex[:6]}"
             metrics = result.get("metrics", {})
-            await db.atlas_models.insert_one({
+            top_feats = result.get("top_features", [])
+            prec = metrics.get("precision", 0.0)
+            rec = metrics.get("recall", 0.0)
+            f1 = round(2 * (prec * rec) / max(prec + rec, 1e-9), 4) if (prec + rec) > 0 else 0.0
+            
+            model_doc = {
                 "model_id": model_id,
-                "kind": req.model.capitalize(),
+                "kind": req.model,
                 "symbol": req.symbol,
+                "provider": req.provider,
                 "metrics": {
+                    "accuracy": metrics.get("accuracy", 0.0),
                     "accuracy_mean": metrics.get("accuracy", 0.0),
-                    "precision": metrics.get("precision", 0.0),
-                    "recall": metrics.get("recall", 0.0),
-                    "roc_auc_mean": metrics.get("roc_auc", 0.0),
-                    "log_loss_mean": metrics.get("log_loss", 0.0),
-                    "accuracy": metrics.get("accuracy", 0.0)
+                    "precision": prec,
+                    "precision_mean": prec,
+                    "recall": rec,
+                    "recall_mean": rec,
+                    "f1": f1,
+                    "f1_mean": f1,
+                    "roc_auc": metrics.get("roc_auc", 0.5),
+                    "roc_auc_mean": metrics.get("roc_auc", 0.5),
+                    "log_loss": metrics.get("log_loss", 0.693),
+                    "log_loss_mean": metrics.get("log_loss", 0.693),
                 },
                 "experiment_id": "lab_train",
                 "fold": 1,
                 "feature_ids": fids,
-                "created_at": now_str
-            })
+                "n_features": len(fids),
+                "feature_importance": [
+                    {"id": f.get("id", ""), "name": f.get("name", f.get("id", "")), "importance": f.get("importance", 0.0)}
+                    for f in top_feats
+                ] if top_feats else [],
+                "hyperparams": {
+                    "architecture": req.model,
+                    "horizon_bars": req.horizon,
+                    "interval": req.interval,
+                    "period": req.period
+                },
+                "created_at": now_str,
+                "tags": ["laboratory", req.model, req.symbol]
+            }
+            await db.learning_models.insert_one(dict(model_doc))
+            await db.atlas_models.insert_one(dict(model_doc))
+            result["registered_model_id"] = model_id
     except Exception as e:
         log.exception("DB write failed for predictions or model registry")
         result["persisted"] = False
@@ -436,6 +500,32 @@ async def get_portfolio():
                 "last_active": "Just now",  # In a real system, compute from b.get("updated_at")
                 "allocation": b.get("allocation", 0.0)
             })
+
+        # Also inspect open positions in paper_positions
+        try:
+            open_positions = await db.paper_positions.find({"status": "open"}).to_list(100)
+            for p in open_positions:
+                pos_id = str(p.get("position_id") or p.get("_id", "pos"))
+                if not any(b.get("id") == pos_id for b in formatted_bots):
+                    entry = float(p.get("entry_price") or 0.0)
+                    size = float(p.get("size") or 1.0)
+                    alloc = round(entry * size, 2) if entry and size else 10000.0
+                    pnl = float(p.get("unrealized_pnl") or 0.0)
+                    formatted_bots.append({
+                        "id": pos_id,
+                        "name": f"Paper Model ({p.get('symbol', 'BTCUSDT')})",
+                        "market": f"{p.get('symbol', 'BTCUSDT')} ({p.get('side', 'LONG').upper()})",
+                        "status": "Active",
+                        "pnl": pnl,
+                        "trades": 1,
+                        "last_active": "Streaming",
+                        "allocation": alloc
+                    })
+        except Exception:
+            pass
+
+        total_deployed = sum(b.get("allocation", 0) for b in formatted_bots)
+        total_pnl = sum(b.get("pnl", 0) for b in formatted_bots)
         return {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "summary": {
@@ -733,6 +823,61 @@ async def get_futures_paper_state():
         raise HTTPException(500, "Error reading state: JSON decode failed after retries")
     # File doesn't exist yet — daemon has never run; return default initial state
     return {"cash": 10000.0, "trades": [], "open_position": None, "equity_snapshot": {"equity": 10000.0, "unrealized_pnl": 0.0}}
+
+@api.get("/futures/logs")
+async def get_futures_logs(lines: int = 40):
+    """Returns the tail of the futures paper daemon execution log."""
+    log_file = ROOT / "futures_paper_daemon.log"
+    if not log_file.exists():
+        return {"logs": ["Futures daemon log file not initialized yet."]}
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+            all_lines = f.readlines()
+            return {"logs": [line.strip() for line in all_lines[-lines:] if line.strip()]}
+    except Exception as e:
+        return {"logs": [f"Error reading futures log: {e}"]}
+
+@api.get("/futures/model-spec")
+async def get_futures_model_spec():
+    """Returns metadata, feature breakdown, and execution policy for the active Futures XGBoost model."""
+    from derivatives_registry import FUTURES_FEATURES
+    return {
+        "model_id": "futures_xgb_v1",
+        "name": "Binance Futures Order Flow XGBoost",
+        "architecture": "Gradient Boosted Decision Trees (XGBoost)",
+        "features_count": len(FUTURES_FEATURES),
+        "target": "Forward 12h Return Direction (Causal Barrier)",
+        "oos_accuracy": 0.554,
+        "auc": 0.572,
+        "brier_score": 0.244,
+        "feature_groups": [
+            {"group": "Orderbook Microstructure", "count": 15, "description": "Microprice, Level-1/5/10 book imbalance, depth skew, spread bps"},
+            {"group": "Flow Toxicity & VPIN", "count": 12, "description": "VPIN 50/100, Trade arrival intensity, large block taker ratio, CVD"},
+            {"group": "Perpetual Carry & Funding", "count": 18, "description": "Settlement rate, funding velocity, funding Z-score, basis spread"},
+            {"group": "Open Interest & Liquidations", "count": 14, "description": "OI delta, OI/Price divergence, Top trader L/S ratio, cascade estimate"},
+            {"group": "Volatility Dynamics", "count": 10, "description": "Garman-Klass, Parkinson, Yang-Zhang, ATR ratio"}
+        ],
+        "top_features": [
+            {"id": "flow.vpin_50", "name": "VPIN 50-Bucket Order Flow Toxicity", "weight": 0.094},
+            {"id": "flow.cvd_delta", "name": "Cumulative Volume Delta (Taker Volume)", "weight": 0.088},
+            {"id": "micro.book_imbalance_l5", "name": "5-Level Orderbook Volume Imbalance", "weight": 0.081},
+            {"id": "funding.velocity", "name": "Perpetual Funding Rate Acceleration", "weight": 0.076},
+            {"id": "flow.trade_intensity", "name": "High-Frequency Trade Arrival Intensity", "weight": 0.072},
+            {"id": "info.hurst_exponent_50", "name": "Hurst Exponent (Trending vs Mean-Reverting)", "weight": 0.065},
+            {"id": "oi.oi_price_divergence", "name": "Open Interest / Price Delta Divergence", "weight": 0.059},
+            {"id": "micro.microprice_divergence", "name": "Weighted Microprice vs Midpoint Divergence", "weight": 0.054}
+        ],
+        "active_policy": {
+            "upper_threshold": 0.58,
+            "lower_threshold": 0.42,
+            "vpin_gate": 0.70,
+            "vpin_exit_gate": 0.85,
+            "stop_loss_pct": 0.015,
+            "take_profit_pct": 0.030,
+            "max_leverage": 5.0,
+            "position_size_pct": 0.20
+        }
+    }
 @api.get("/whale-hunter/state")
 async def get_whale_hunter_state():
     import json
@@ -792,6 +937,7 @@ _DAEMON_SCRIPTS = {
     "stat-arb":     "stat_arb_daemon.py",
     "whale-hunter": "whale_hunter_daemon.py" if (ROOT / "whale_hunter_daemon.py").exists() else None,
     "futures-paper": "futures_paper_daemon.py",
+    "options-paper": "options_paper_daemon.py",
 }
 _daemon_procs: dict = {}
 @api.post("/daemons/{daemon_name}/toggle")
@@ -807,9 +953,13 @@ async def toggle_daemon(daemon_name: str, payload: dict):
         existing = _daemon_procs.get(daemon_name)
         if existing and existing.poll() is None:
             return {"status": "already_running", "pid": existing.pid, "daemon": daemon_name}
+        env = os.environ.copy()
+        python_libs = str(ROOT.parent.parent / "libs" / "python")
+        env["PYTHONPATH"] = f"{python_libs};{ROOT}" + (f";{env['PYTHONPATH']}" if "PYTHONPATH" in env else "")
         proc = _subprocess.Popen(
             [_sys.executable, str(ROOT / script)],
             cwd=str(ROOT),
+            env=env,
             stdout=_subprocess.DEVNULL,
             stderr=_subprocess.DEVNULL,
         )

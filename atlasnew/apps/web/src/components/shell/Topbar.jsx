@@ -96,10 +96,13 @@ export function Topbar() {
         <div style={{
           fontFamily: "var(--font-mono)", fontSize: 10,
           color: "var(--text-tertiary)", letterSpacing: "0.05em",
-          display: "flex", alignItems: "center", gap: 4,
-        }}>
-          <span style={{ color: "var(--blue-400)", fontWeight: 500 }}>{featCount.toLocaleString()}</span>
-          <span>features</span>
+          display: "flex", alignItems: "center", gap: 6,
+        }} title="1,039 Total Dimensions: 925 Spot Core (L1-L4) + 114 Derivatives Extensions (69 Futures + 45 Options)">
+          <span style={{ color: "var(--blue-400)", fontWeight: 600 }}>{featCount.toLocaleString()}</span>
+          <span>dimensions</span>
+          <span style={{ fontSize: 9, color: "var(--text-secondary)", background: "var(--bg-elevated)", border: "1px solid var(--border-dim)", padding: "1px 5px", borderRadius: 3 }}>
+            925 Core · 114 Deriv
+          </span>
         </div>
       )}
 

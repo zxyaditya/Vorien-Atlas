@@ -499,6 +499,25 @@ def build_router(*, store: PaperStore, fetch_smart,
             pos_dict["last_mark_at"] = _utcnow()
             await store.insert_position(pos_dict)
             await store.update_account(updated_acc)
+            # Register active bot session in atlas_bots for real-time portfolio monitoring
+            if hasattr(store, "_db") and store._db is not None:
+                try:
+                    await store._db.atlas_bots.update_one(
+                        {"model_id": req.model_id, "symbol": req.symbol},
+                        {"$set": {
+                            "name": f"{meta.get('kind', 'Model').upper()}-{req.symbol} ({len(feature_ids)} Feats)",
+                            "market": f"{req.symbol} ({req.interval})",
+                            "status": "Active",
+                            "allocation": float(req.size_pct * 1000.0),
+                            "unrealized_pnl": 0.0,
+                            "trades_count": 1,
+                            "model_id": req.model_id,
+                            "updated_at": _utcnow()
+                        }},
+                        upsert=True
+                    )
+                except Exception:
+                    pass
             return _clean({
                 "position_opened": True,
                 "inference": inference_result,

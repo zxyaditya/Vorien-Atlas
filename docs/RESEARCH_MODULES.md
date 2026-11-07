@@ -70,35 +70,43 @@ The Funding Arb module is a market-neutral yield generation system. It capitaliz
 
 ## 5. Futures Core
 
-The Futures Core module (`atlas_futures_core`) encapsulates the logic required to trade leveraged derivatives securely.
+The Futures Core module (`atlas_futures_core` and `derivatives_registry.py`) encapsulates the logic required to model, predict, and trade leveraged perpetual futures.
 
-### 5.1 Features and State Machines
-- Integrates specialized Layer 3 state machines tailored for derivatives, such as open interest (OI) velocity, liquidations cascades, and long/short ratio skew.
+### 5.1 Features and State Machines (69 Dimensions)
+- Orderbook depth gradients, microprice-midpoint divergence, Level-1/5/10 imbalance ratios.
+- Volume-Synchronized Probability of Toxicity (VPIN 50 & 100), Cumulative Volume Delta (CVD), aggressor buy ratio.
+- Perpetual funding rates, funding velocity ($d\text{Rate}/dt$), funding acceleration, 50-period Z-score, basis spread.
+- Open interest (OI) velocity, liquidations cascades, and long/short ratio skew.
 - Margin accounting states: Cross vs. Isolated tracking.
 
 ### 5.2 futures_paper_daemon
-- Simulates live execution with accurate slippage models and latency penalties.
-- Processes continuous ticks, updating margin balances and triggering synthetic liquidations if the simulated mark price breaches bankruptcy levels.
+- An autonomous daemon (`apps/api/futures_paper_daemon.py`) running continuously on 5-minute candle alignment.
+- Pulls live public Binance Futures orderbooks and trades.
+- Computes all 69 features in real-time, runs inference with `futures_xgb_v1.pkl`, and manages a live paper portfolio.
+- Enforces VPIN circuit breakers (rejecting toxic entry $> 0.70$, emergency close $> 0.85$).
+- Exposes telemetry via `GET /api/futures/paper-state`, execution logs via `GET /api/futures/logs`, and model specifications via `GET /api/futures/model-spec`.
 
-### 5.3 futures_auto_trainer
-- A fully automated pipeline (`apps/api/futures_auto_trainer.py`) that periodically retrains the machine learning models.
-- Uses expanding window walk-forward optimization, ensuring that models adapt to recent derivatives market regimes (e.g., transitioning from high-leverage retail environments to low-leverage institutional environments).
+### 5.3 Dedicated Web Workspace
+- Visualized in the web terminal at `/futures` (Futures & Perpetuals Terminal) with real-time carry/squeeze dynamics, live CVD taker ratio, and execution logs console.
 
 ## 6. Options Core
 
-The Options Core module (`atlas_options_core`) brings traditional quantitative finance pricing models to the Atlas infrastructure.
+The Options Core module (`atlas_options_core` and `derivatives_registry.py`) brings institutional derivatives volatility surface analytics and Greeks computation to Atlas.
 
-### 6.1 Options-Specific Analytics
-- Implements Black-Scholes-Merton and Binomial Tree pricing models.
-- Analyzes Implied Volatility (IV) surfaces, extracting the IV smile and term structure (contango vs. backwardation).
+### 6.1 Greeks & Surface Analytics (45 Dimensions)
+- First-order Greeks: Delta, Vega, Theta, Rho.
+- Higher-order Greeks: Gamma, Vanna ($d\Delta/d\sigma$), Volga ($d\nu/d\sigma$), Charm ($d\Delta/dt$), Color, Speed.
+- Volatility surface dynamics: ATM IV (30d/60d/90d), 25-Delta Risk Reversal (skew), 25-Delta Butterfly (smile curvature / fat tails), Term Structure slope (Contango/Backwardation).
+- Dealer market structure: Net Dealer Gamma Exposure (GEX in $M), Net Dealer Vega Exposure (VEX), Gamma Flip Level, Max Pain Strike, Volatility Risk Premium (VRP = IV - RV).
 
-### 6.2 Greeks Computation
-- Real-time computation of first-order Greeks: Delta (directional exposure), Gamma (convexity), Theta (time decay), and Vega (volatility exposure).
-- Second-order Greeks: Vanna and Charm, crucial for analyzing dealer hedging flows (Gamma squeezes).
+### 6.2 options_paper_daemon
+- An autonomous daemon (`apps/api/options_paper_daemon.py`) that continuously monitors live Deribit options orderbooks and Binance underlying spot data.
+- Dual-ML classifier architecture: Spot Direction Classifier (54.8% Acc) and Volatility Expansion Classifier (56.2% Acc).
+- Executes delta-neutral volatility arbitrage with dynamic VPIN vega sizing and $2.0\times \text{ATR}$ adaptive trailing stops.
+- Exposes portfolio state via `GET /api/options/portfolio`, logs via `GET /api/options/logs`, and model spec via `GET /api/options/model-spec`.
 
-### 6.3 Learning System Integration
-- The Options module feeds IV surface parameters directly into the Atlas Learning System as L4 embeddings.
-- This allows the Decision Engine to predict spot price movements based on options market maker positioning.
+### 6.3 Dedicated Web Workspace
+- Visualized in the web terminal at `/options` (Options Vol Surface & Greeks) with live Deribit options positions, Black-Scholes Greeks surface, and smile curvature breakdown.
 
 
 

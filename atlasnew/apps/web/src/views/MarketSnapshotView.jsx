@@ -10,6 +10,12 @@ export function MarketSnapshotView() {
   
   // Real-time live portfolio state
   const [portfolio, setPortfolio] = useState(null);
+  const [slippageBps, setSlippageBps] = useState(2.0);
+
+  const totalCap = portfolio?.summary?.total_capital || 100000;
+  const deployedCap = portfolio?.summary?.deployed_capital || 0;
+  const baseVolume = deployedCap > 0 ? deployedCap : (totalCap * 0.25);
+  const frictionCost = (baseVolume * (slippageBps / 10000));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -197,14 +203,28 @@ export function MarketSnapshotView() {
                   <div className="sys-label" style={{ margin: 0 }}>Slippage Simulator</div>
                 </div>
                 <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 12 }}>
-                  Adjust theoretical PnL to real-world conditions.
+                  Adjust theoretical PnL to real-world execution friction.
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <input type="range" min="0" max="10" defaultValue="2" style={{ flex: 1, accentColor: "var(--amber)" }} />
-                  <span style={{ fontSize: 12, color: "var(--text-primary)" }}>2 bps</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="25"
+                    step="0.5"
+                    value={slippageBps}
+                    onChange={e => setSlippageBps(parseFloat(e.target.value) || 0)}
+                    style={{ flex: 1, accentColor: "var(--amber)", cursor: "pointer" }}
+                  />
+                  <span style={{ fontSize: 12, color: "var(--text-primary)", fontFamily: "var(--font-mono)", width: 55, textAlign: "right" }}>
+                    {slippageBps.toFixed(1)} bps
+                  </span>
                 </div>
-                <div style={{ fontSize: 11, color: "var(--text-tertiary)" }}>
-                  Estimated Friction Cost: <span style={{ color: "var(--amber)" }}>-$124.00</span>
+                <div style={{ fontSize: 11, color: "var(--text-tertiary)", display: "flex", justifyContent: "space-between" }}>
+                  <span>Estimated Friction Cost:</span>
+                  <span style={{ color: "var(--amber)", fontFamily: "var(--font-mono)", fontWeight: 600 }}>-${frictionCost.toFixed(2)}</span>
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-ghost)", marginTop: 4 }}>
+                  Friction drag on ${(baseVolume).toLocaleString()}: -{((frictionCost / baseVolume) * 100).toFixed(3)}%
                 </div>
               </div>
 

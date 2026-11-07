@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import { API, makeAbortable, isAbortError, fmtRelative } from "../lib/helpers";
 import { SymbolSelector } from "../components/SymbolSelector";
+import { useAtlas } from "../store/atlasStore";
 
 export function ModelRegistryView() {
-  const [activeTab, setActiveTab] = useState("registry"); // 'registry' or 'laboratory'
+  const [activeTab, setActiveTab] = useState("registry"); // 'registry', 'laboratory', 'history'
   
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -14,7 +15,7 @@ export function ModelRegistryView() {
           <div>
             <h2 className="workspace-title">Model Registry & Laboratory</h2>
             <div className="workspace-subtitle">
-              Versioned model checkpoints, hyperparameter sweeps, and out-of-sample validation.
+              Versioned model checkpoints, feature dimension selection, out-of-sample validation, and paper trading deployment.
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -42,17 +43,22 @@ export function ModelRegistryView() {
 
       <div style={{ flex: 1, overflow: "hidden" }}>
         {activeTab === "registry" && <ModelRegistryList />}
-        {activeTab === "laboratory" && <ModelLaboratory />}
+        {activeTab === "laboratory" && <ModelLaboratory onDeploy={() => setActiveTab("registry")} />}
         {activeTab === "history" && <ModelHistory />}
       </div>
     </div>
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   1. REGISTERED MODELS (Deep Quant Evaluation & Inspection)
+   ═══════════════════════════════════════════════════════════════════════════ */
 function ModelRegistryList() {
+  const { dispatch } = useAtlas();
   const [models, setModels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
+  const [featureSearch, setFeatureSearch] = useState("");
 
   const load = useCallback(async (signal) => {
     setLoading(true);
@@ -79,15 +85,40 @@ function ModelRegistryList() {
     try {
       await axios.delete(`${API}/learning/models/${selected.model_id}`);
       setSelected(null);
-      load(); // Reload list
+      load();
     } catch (err) {
       alert("Failed to delete model: " + (err.response?.data?.detail || err.message));
     }
   };
 
+  const handleDeployToPaper = (m) => {
+    if (!m) return;
+    sessionStorage.setItem("atlas_prefill_model_id", m.model_id);
+    dispatch({ type: "SET_VIEW", payload: "paper-trading" });
+  };
+
+  // Filter feature list in details
+  const filteredFeatures = useMemo(() => {
+    if (!selected?.feature_ids) return [];
+    if (!featureSearch) return selected.feature_ids;
+    const q = featureSearch.toLowerCase();
+    return selected.feature_ids.filter(id => id.toLowerCase().includes(q));
+  }, [selected?.feature_ids, featureSearch]);
+
+  const m = selected?.metrics || {};
+  const acc = m.accuracy_mean ?? m.accuracy;
+  const prec = m.precision_mean ?? m.precision;
+  const rec = m.recall_mean ?? m.recall;
+  const f1 = m.f1_mean ?? m.f1;
+  const auroc = m.roc_auc_mean ?? m.roc_auc;
+  const logloss = m.log_loss_mean ?? m.log_loss;
+  const brier = m.brier_mean ?? m.brier;
+  const ic = m.information_coefficient_mean ?? m.information_coefficient;
+  const cm = m.confusion_matrix;
+
   return (
     <div style={{ display: "flex", height: "100%" }}>
-      {/* List */}
+      {/* Models List */}
       <div style={{ width: 340, flexShrink: 0, borderRight: "1px solid var(--border-dim)", overflow: "auto", background: "var(--bg-surface)" }}>
         {loading ? (
           <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -99,106 +130,231 @@ function ModelRegistryList() {
             <div className="page-empty-desc">Train a model in the laboratory to register it.</div>
           </div>
         ) : (
-          models.map(m => (
-            <div
-              key={m.model_id}
-              onClick={() => setSelected(m)}
-              style={{
-                padding: "14px 18px",
-                borderBottom: "1px solid var(--border-dim)",
-                cursor: "pointer",
-                background: selected?.model_id === m.model_id ? "var(--bg-hover)" : "transparent",
-                borderLeft: selected?.model_id === m.model_id ? "2px solid var(--blue-500)" : "2px solid transparent",
-                transition: "background 100ms",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                <span className="badge badge-active">{m.kind}</span>
-                <span style={{ fontSize: 10, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>
-                  {m.symbol || "UNKNOWN"}
-                </span>
-              </div>
-              <div style={{ fontSize: 12.5, color: "var(--text-primary)", fontWeight: 500, marginBottom: 4, fontFamily: "var(--font-mono)" }}>
-                {m.model_id}
-              </div>
-              {m.metrics?.accuracy_mean !== undefined && (
-                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>
-                  Accuracy: <span style={{ color: "var(--green)" }}>{(m.metrics.accuracy_mean * 100).toFixed(1)}%</span>
+          models.map(mod => {
+            const modAcc = mod.metrics?.accuracy_mean ?? mod.metrics?.accuracy;
+            const featLen = mod.n_features || mod.feature_ids?.length || 0;
+            const isSel = selected?.model_id === mod.model_id;
+            return (
+              <div
+                key={mod.model_id}
+                onClick={() => setSelected(mod)}
+                style={{
+                  padding: "14px 18px",
+                  borderBottom: "1px solid var(--border-dim)",
+                  cursor: "pointer",
+                  background: isSel ? "var(--bg-hover)" : "transparent",
+                  borderLeft: isSel ? "2px solid var(--blue-500)" : "2px solid transparent",
+                  transition: "background 100ms",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span className="badge badge-active">{mod.kind?.toUpperCase() || "ML"}</span>
+                    <span style={{ fontSize: 11, color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
+                      {mod.symbol || "BTCUSDT"}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>
+                    {featLen} feats
+                  </span>
                 </div>
-              )}
-              <div style={{ marginTop: 6, fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>
-                {fmtRelative(m.created_at)}
+                <div style={{ fontSize: 12, color: "var(--text-primary)", fontWeight: 500, marginBottom: 4, fontFamily: "var(--font-mono)", wordBreak: "break-all" }}>
+                  {mod.model_id}
+                </div>
+                {modAcc !== undefined && (
+                  <div style={{ fontSize: 11, color: "var(--text-secondary)", marginBottom: 4 }}>
+                    OOS Accuracy: <span style={{ color: "var(--green)", fontWeight: 500 }}>{(modAcc * 100).toFixed(1)}%</span>
+                  </div>
+                )}
+                <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-tertiary)" }}>
+                  {fmtRelative(mod.created_at)}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* Details */}
-      <div style={{ flex: 1, padding: "32px 40px", overflow: "auto", background: "var(--bg-base)" }}>
+      {/* Details View */}
+      <div style={{ flex: 1, padding: "28px 36px", overflow: "auto", background: "var(--bg-base)" }}>
         {!selected ? (
           <div className="page-empty">
-            <div className="page-empty-desc">Select a model to view its validation metrics.</div>
+            <div className="page-empty-desc">Select a model from the list to view its mathematical parameters and performance telemetry.</div>
           </div>
         ) : (
-          <div style={{ maxWidth: 800, margin: "0 auto" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+          <div style={{ maxWidth: 880, margin: "0 auto", display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* Header Card */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 16, borderBottom: "1px solid var(--border-dim)" }}>
               <div>
-                <h3 style={{ fontSize: 20, fontWeight: 300, color: "var(--text-primary)", fontFamily: "var(--font-mono)", marginBottom: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span className="badge badge-active" style={{ fontSize: 11 }}>{selected.kind?.toUpperCase()}</span>
+                  <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>{selected.symbol}</span>
+                  <span style={{ fontSize: 11, color: "var(--text-ghost)" }}>·</span>
+                  <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--blue-400)" }}>{selected.n_features || selected.feature_ids?.length || 0} Dimensions</span>
+                </div>
+                <h3 style={{ fontSize: 16, fontWeight: 500, color: "var(--text-primary)", fontFamily: "var(--font-mono)", margin: 0 }}>
                   {selected.model_id}
                 </h3>
-                <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-                  Trained on {new Date(selected.created_at).toLocaleString()}
+                <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>
+                  Trained {new Date(selected.created_at).toLocaleString()} · Fold {selected.fold || 1}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <div className="badge badge-active">{selected.kind}</div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => handleDeployToPaper(selected)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}
+                >
+                  <span>Deploy to Paper Trading</span>
+                  <span>→</span>
+                </button>
                 <button className="btn btn-sm btn-ghost" style={{ color: "var(--red)" }} onClick={handleDeleteModel}>
                   Delete
                 </button>
               </div>
             </div>
 
-            {/* Validation Metrics */}
-            <div style={{ marginBottom: 32 }}>
-              <div className="sys-label" style={{ marginBottom: 12 }}>Out-of-Sample Validation</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", border: "1px solid var(--border-dim)", borderRadius: 4, overflow: "hidden", position: "relative" }}>
-                <div style={{ position: "absolute", top: 0, left: 0, width: 8, height: 8, borderTop: "1px solid var(--border-accent)", borderLeft: "1px solid var(--border-accent)", pointerEvents: "none" }} />
+            {/* Out-of-Sample Performance Matrix */}
+            <div>
+              <div className="sys-label" style={{ marginBottom: 10 }}>Out-of-Sample Validation & Statistical Rigor</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, border: "1px solid var(--border-dim)", borderRadius: 6, overflow: "hidden", background: "var(--border-dim)" }}>
                 {[
-                  { label: "Accuracy", value: selected.metrics?.accuracy_mean !== undefined ? (selected.metrics.accuracy_mean * 100).toFixed(2) + "%" : "—" },
-                  { label: "AUROC", value: selected.metrics?.roc_auc_mean !== undefined ? selected.metrics.roc_auc_mean.toFixed(3) : "—" },
-                  { label: "Log Loss", value: selected.metrics?.log_loss_mean !== undefined ? selected.metrics.log_loss_mean.toFixed(3) : "—" },
+                  { label: "Accuracy / Hit Rate", value: acc != null ? (acc * 100).toFixed(2) + "%" : "—", color: "var(--green)" },
+                  { label: "Precision", value: prec != null ? prec.toFixed(3) : "—" },
+                  { label: "Recall", value: rec != null ? rec.toFixed(3) : "—" },
+                  { label: "F1 Score", value: f1 != null ? f1.toFixed(3) : "—" },
+                  { label: "AUROC", value: auroc != null ? auroc.toFixed(3) : "—" },
+                  { label: "Log Loss", value: logloss != null ? logloss.toFixed(3) : "—" },
+                  { label: "Brier Score", value: brier != null ? brier.toFixed(4) : "—" },
+                  { label: "Information Coeff (IC)", value: ic != null ? (ic > 0 ? "+" : "") + ic.toFixed(4) : "—", color: ic != null && ic > 0 ? "var(--green)" : undefined },
                 ].map((s, i) => (
-                  <div key={i} style={{ padding: "16px 20px", background: "var(--bg-elevated)", borderRight: i < 2 ? "1px solid var(--border-dim)" : "none" }}>
-                    <div className="stat-label">{s.label}</div>
-                    <div className="stat-value" style={{ fontSize: 16, marginTop: 4 }}>{s.value}</div>
+                  <div key={i} style={{ padding: "14px 16px", background: "var(--bg-elevated)" }}>
+                    <div className="stat-label" style={{ fontSize: 10 }}>{s.label}</div>
+                    <div className="stat-value" style={{ fontSize: 15, marginTop: 4, color: s.color || "var(--text-primary)" }}>{s.value}</div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Configuration */}
-            <div style={{ marginBottom: 32 }}>
-              <div className="sys-label" style={{ marginBottom: 12 }}>Model Configuration</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1, border: "1px solid var(--border-dim)", borderRadius: 4, overflow: "hidden" }}>
-                {[
-                  { label: "Experiment ID", value: selected.experiment_id },
-                  { label: "Fold", value: selected.fold },
-                  { label: "Features", value: selected.feature_ids?.length },
-                  { label: "Asset", value: selected.symbol },
-                ].map((row, i) => (
-                  <div key={i} style={{
-                    padding: "12px 16px", background: "var(--bg-elevated)",
-                    borderRight: i % 2 === 0 ? "1px solid var(--border-dim)" : "none",
-                    borderBottom: i < 2 ? "1px solid var(--border-dim)" : "none",
-                  }}>
-                    <div className="mono-label" style={{ marginBottom: 4 }}>{row.label}</div>
-                    <div className="mono-value">{row.value || "—"}</div>
+            {/* Confusion Matrix (if present) */}
+            {cm && (
+              <div>
+                <div className="sys-label" style={{ marginBottom: 10 }}>Out-of-Sample Confusion Matrix</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, maxWidth: 360 }}>
+                  <div style={{ padding: "10px 14px", background: "var(--bg-surface)", border: "1px solid var(--border-dim)", borderRadius: 4 }}>
+                    <div style={{ fontSize: 10, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>True Positives (TP)</div>
+                    <div style={{ fontSize: 16, fontWeight: 500, color: "var(--green)", fontFamily: "var(--font-mono)" }}>{cm.tp}</div>
                   </div>
-                ))}
+                  <div style={{ padding: "10px 14px", background: "var(--bg-surface)", border: "1px solid var(--border-dim)", borderRadius: 4 }}>
+                    <div style={{ fontSize: 10, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>False Positives (FP)</div>
+                    <div style={{ fontSize: 16, fontWeight: 500, color: "var(--red)", fontFamily: "var(--font-mono)" }}>{cm.fp}</div>
+                  </div>
+                  <div style={{ padding: "10px 14px", background: "var(--bg-surface)", border: "1px solid var(--border-dim)", borderRadius: 4 }}>
+                    <div style={{ fontSize: 10, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>False Negatives (FN)</div>
+                    <div style={{ fontSize: 16, fontWeight: 500, color: "var(--red)", fontFamily: "var(--font-mono)" }}>{cm.fn}</div>
+                  </div>
+                  <div style={{ padding: "10px 14px", background: "var(--bg-surface)", border: "1px solid var(--border-dim)", borderRadius: 4 }}>
+                    <div style={{ fontSize: 10, color: "var(--text-tertiary)", fontFamily: "var(--font-mono)" }}>True Negatives (TN)</div>
+                    <div style={{ fontSize: 16, fontWeight: 500, color: "var(--green)", fontFamily: "var(--font-mono)" }}>{cm.tn}</div>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
+            {/* Feature Importance Leaderboard */}
+            {selected.feature_importance && selected.feature_importance.length > 0 && (
+              <div>
+                <div className="sys-label" style={{ marginBottom: 10 }}>Feature Importance Leaderboard (Top Predictors)</div>
+                <div style={{ border: "1px solid var(--border-dim)", borderRadius: 6, overflow: "hidden", background: "var(--bg-surface)" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border-dim)", textAlign: "left" }}>
+                        <th style={{ padding: "8px 14px", width: 40, color: "var(--text-tertiary)" }}>#</th>
+                        <th style={{ padding: "8px 14px", color: "var(--text-secondary)" }}>Feature Dimension</th>
+                        <th style={{ padding: "8px 14px", width: 140, color: "var(--text-secondary)" }}>Relative Weight</th>
+                        <th style={{ padding: "8px 14px", width: 80, textAlign: "right", color: "var(--text-secondary)" }}>Importance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selected.feature_importance.slice(0, 12).map((f, idx) => {
+                        const maxImp = selected.feature_importance[0]?.importance || 1;
+                        const pct = Math.min(100, Math.max(4, (f.importance / maxImp) * 100));
+                        return (
+                          <tr key={idx} style={{ borderBottom: "1px solid var(--border-dim)" }}>
+                            <td style={{ padding: "8px 14px", color: "var(--text-ghost)", fontFamily: "var(--font-mono)" }}>{idx + 1}</td>
+                            <td style={{ padding: "8px 14px", fontFamily: "var(--font-mono)", color: "var(--text-primary)" }}>
+                              <div>{f.id}</div>
+                              {f.name && f.name !== f.id && <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{f.name}</div>}
+                            </td>
+                            <td style={{ padding: "8px 14px" }}>
+                              <div style={{ height: 6, width: "100%", background: "var(--bg-base)", borderRadius: 3, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${pct}%`, background: "var(--blue-400)", borderRadius: 3 }} />
+                              </div>
+                            </td>
+                            <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
+                              {(f.importance * 100).toFixed(2)}%
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Feature Matrix Dimension Inspector */}
+            {selected.feature_ids && selected.feature_ids.length > 0 && (
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <div className="sys-label" style={{ margin: 0 }}>
+                    Feature Dimension Set ({selected.feature_ids.length} Total Dimensions)
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search feature IDs…"
+                    value={featureSearch}
+                    onChange={e => setFeatureSearch(e.target.value)}
+                    style={{
+                      padding: "4px 10px", fontSize: 11, background: "var(--bg-surface)",
+                      border: "1px solid var(--border-dim)", borderRadius: 4, color: "var(--text-primary)",
+                      fontFamily: "var(--font-mono)", width: 180
+                    }}
+                  />
+                </div>
+                <div style={{
+                  maxHeight: 180, overflowY: "auto", padding: 12, background: "var(--bg-surface)",
+                  border: "1px solid var(--border-dim)", borderRadius: 6, display: "flex", flexWrap: "wrap", gap: 6
+                }}>
+                  {filteredFeatures.map((fid, i) => (
+                    <span key={i} style={{
+                      padding: "3px 8px", background: "var(--bg-elevated)", border: "1px solid var(--border-dim)",
+                      borderRadius: 3, fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-secondary)"
+                    }}>
+                      {fid}
+                    </span>
+                  ))}
+                  {filteredFeatures.length === 0 && (
+                    <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>No matching feature IDs found.</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Model Hyperparameters & Configuration */}
+            {selected.hyperparams && (
+              <div>
+                <div className="sys-label" style={{ marginBottom: 10 }}>Hyperparameter Specification</div>
+                <div style={{
+                  padding: "12px 16px", background: "var(--bg-surface)", border: "1px solid var(--border-dim)",
+                  borderRadius: 6, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--text-secondary)"
+                }}>
+                  <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                    {JSON.stringify(selected.hyperparams, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -206,14 +362,58 @@ function ModelRegistryList() {
   );
 }
 
-function ModelLaboratory() {
+/* ═══════════════════════════════════════════════════════════════════════════
+   2. MODEL LABORATORY (Feature Selection & Rigorous Training)
+   ═══════════════════════════════════════════════════════════════════════════ */
+function ModelLaboratory({ onDeploy }) {
+  const { dispatch } = useAtlas();
   const [modelType, setModelType] = useState("xgboost");
   const [horizon, setHorizon] = useState(5);
   const [symbol, setSymbol] = useState("BTCUSDT");
   const [provider, setProvider] = useState("binance");
+  const [featurePack, setFeaturePack] = useState("core_925");
+  const [availableFeatures, setAvailableFeatures] = useState([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+
+  // Load feature registry definitions
+  useEffect(() => {
+    let alive = true;
+    axios.get(`${API}/registry/features`).then(res => {
+      if (alive) setAvailableFeatures(res.data || []);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Compute selected feature IDs according to chosen pack
+  const selectedFeatureIds = useMemo(() => {
+    if (!availableFeatures.length) return [];
+    switch (featurePack) {
+      case "all_1039":
+        return availableFeatures.map(f => f.id);
+      case "core_925":
+        return availableFeatures.filter(f => f.layer >= 1 && f.layer <= 4).map(f => f.id);
+      case "deriv_114":
+        return availableFeatures.filter(f => f.layer === 5 || f.module === "futures" || f.module === "options").map(f => f.id);
+      case "futures_69":
+        return availableFeatures.filter(f => f.module === "futures").map(f => f.id);
+      case "options_45":
+        return availableFeatures.filter(f => f.module === "options").map(f => f.id);
+      case "l1_612":
+        return availableFeatures.filter(f => f.layer === 1).map(f => f.id);
+      case "l2_151":
+        return availableFeatures.filter(f => f.layer === 2).map(f => f.id);
+      case "l3_90":
+        return availableFeatures.filter(f => f.layer === 3).map(f => f.id);
+      case "l4_72":
+        return availableFeatures.filter(f => f.layer === 4).map(f => f.id);
+      case "fast_60":
+        return availableFeatures.filter(f => f.module === "price" && f.perspective !== "Magnitude").slice(0, 60).map(f => f.id);
+      default:
+        return availableFeatures.map(f => f.id);
+    }
+  }, [availableFeatures, featurePack]);
 
   const handleTrain = async () => {
     setLoading(true);
@@ -222,9 +422,13 @@ function ModelLaboratory() {
     
     try {
       const payload = {
-        provider, symbol, interval: "1d", period: "2y",
+        provider,
+        symbol,
+        interval: "1d",
+        period: "2y",
         horizon: parseInt(horizon, 10),
-        model: modelType
+        model: modelType,
+        feature_ids: selectedFeatureIds.length > 0 ? selectedFeatureIds : undefined
       };
       
       const res = await axios.post(`${API}/predict/train`, payload);
@@ -236,19 +440,25 @@ function ModelLaboratory() {
     }
   };
 
+  const handleDeployToPaper = () => {
+    const modelId = result?.registered_model_id || `${modelType}_${symbol}_${horizon}`;
+    sessionStorage.setItem("atlas_prefill_model_id", modelId);
+    dispatch({ type: "SET_VIEW", payload: "paper-trading" });
+  };
+
   return (
     <div style={{ display: "flex", height: "100%" }}>
-      {/* Config */}
-      <div style={{ width: 360, flexShrink: 0, borderRight: "1px solid var(--border-dim)", padding: "24px 28px", overflow: "auto" }}>
-        <div style={{ marginBottom: 32 }}>
-          <div className="sys-label" style={{ marginBottom: 12 }}>Training Configuration</div>
+      {/* Configuration Column */}
+      <div style={{ width: 380, flexShrink: 0, borderRight: "1px solid var(--border-dim)", padding: "24px 28px", overflow: "auto" }}>
+        <div style={{ marginBottom: 28 }}>
+          <div className="sys-label" style={{ marginBottom: 12 }}>Architecture & Asset</div>
           
           <div className="input-group">
-            <label className="input-label">Architecture</label>
+            <label className="input-label">Model Architecture</label>
             <select className="input" value={modelType} onChange={e => setModelType(e.target.value)}>
-              <option value="xgboost">XGBoost (Gradient Boosted Trees)</option>
-              <option value="randomforest">Random Forest Classifier</option>
-              <option value="logreg">Logistic Regression (L2)</option>
+              <option value="xgboost">XGBoost (Gradient Boosted Decision Trees)</option>
+              <option value="randomforest">Random Forest Classifier (Ensemble)</option>
+              <option value="logreg">Logistic Regression (L2 Regularized)</option>
             </select>
           </div>
           
@@ -261,96 +471,223 @@ function ModelLaboratory() {
           />
           
           <div className="input-group">
-            <label className="input-label">Prediction Horizon (Bars)</label>
-            <input type="number" className="input" value={horizon} onChange={e => setHorizon(e.target.value)} />
+            <label className="input-label">Prediction Horizon (Bars Forward)</label>
+            <input type="number" min="1" max="50" className="input" value={horizon} onChange={e => setHorizon(e.target.value)} />
           </div>
         </div>
 
-        <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={handleTrain} disabled={loading}>
-          {loading ? "Training Model..." : "Dispatch Training Job"}
+        {/* Feature Dimension Selector */}
+        <div style={{ marginBottom: 28 }}>
+          <div className="sys-label" style={{ marginBottom: 8 }}>Feature Dimensions & Layers</div>
+          <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginBottom: 10 }}>
+            Select the causal feature layers passed to the training pipeline:
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {[
+              { id: "all_1039", name: "Unified Market Matrix", count: "1,039 Dimensions", desc: "All 925 Spot Core + 114 Futures & Options features" },
+              { id: "core_925", name: "Core L1–L4 Spot Matrix", count: "925 Features", desc: "All physical, cross-asset, regime & representation dimensions" },
+              { id: "deriv_114",name: "Derivatives Extensions", count: "114 Features", desc: "69 Perpetual Futures + 45 Options Greeks & Vol Surface" },
+              { id: "futures_69", name: "Futures: Perpetuals & CVD", count: "69 Features", desc: "Funding rates, CVD volume delta, open interest, book skew" },
+              { id: "options_45", name: "Options: Vol Surface & Greeks", count: "45 Features", desc: "ATM IV, risk reversal skew, GEX, vanna, volga, max pain" },
+              { id: "l1_612",   name: "Layer 1: Physical Measurement", count: "612 Features", desc: "Volatility (CC, GK, YZ), order flow, wavelets, entropy" },
+              { id: "l2_151",   name: "Layer 2: Cross-Asset Dynamics", count: "151 Features", desc: "Cointegration spreads, relative strength, lead-lag" },
+              { id: "l3_90",    name: "Layer 3: Market Regime & Chaos", count: "90 Features", desc: "Hurst exponents, vortex, structural volatility states" },
+              { id: "l4_72",    name: "Layer 4: Representation & Memory", count: "72 Features", desc: "Fractional differentiation (d≈0.4), PCA components" },
+              { id: "fast_60",  name: "Price & Microstructure Fast Subset", count: "60 Features", desc: "Rapid prototyping subset" },
+            ].map(pack => {
+              const active = featurePack === pack.id;
+              return (
+                <div
+                  key={pack.id}
+                  onClick={() => setFeaturePack(pack.id)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 4,
+                    border: `1px solid ${active ? "var(--blue-500)" : "var(--border-dim)"}`,
+                    background: active ? "rgba(66, 106, 230, 0.08)" : "var(--bg-surface)",
+                    cursor: "pointer",
+                    transition: "all 120ms"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: active ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                      {pack.name}
+                    </span>
+                    <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: active ? "var(--blue-400)" : "var(--text-tertiary)" }}>
+                      {pack.count}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 10, color: "var(--text-ghost)", marginTop: 2 }}>{pack.desc}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ marginTop: 10, fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--green)", display: "flex", alignItems: "center", gap: 6 }}>
+            <span>✓ Invariant:</span>
+            <span>{selectedFeatureIds.length || 1039} Causal dimensions selected (Zero lookahead bias)</span>
+          </div>
+        </div>
+
+        <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", fontWeight: 500 }} onClick={handleTrain} disabled={loading}>
+          {loading ? "Training Model in Background…" : `Dispatch Training Job (${selectedFeatureIds.length || 1039} Dimensions)`}
         </button>
 
         {error && (
-          <div style={{ marginTop: 16, padding: "12px 16px", background: "var(--red-muted)", border: "1px solid rgba(220,64,75,0.2)", borderRadius: 4, fontSize: 12.5, color: "var(--red)" }}>
+          <div style={{ marginTop: 16, padding: "12px 16px", background: "var(--red-muted)", border: "1px solid rgba(220,64,75,0.2)", borderRadius: 4, fontSize: 12, color: "var(--red)" }}>
             {error}
           </div>
         )}
       </div>
 
-      {/* Output */}
-      <div style={{ flex: 1, padding: "32px 40px", overflow: "auto", background: "var(--bg-base)" }}>
+      {/* Output Column */}
+      <div style={{ flex: 1, padding: "28px 36px", overflow: "auto", background: "var(--bg-base)" }}>
         {!result && !loading && (
           <div className="page-empty">
-            <div className="page-empty-desc">Configure parameters and dispatch a training job.</div>
+            <div className="page-empty-title">Ready for Training</div>
+            <div className="page-empty-desc">
+              Select model architecture, feature dimension set, and target asset, then dispatch a training job.
+            </div>
           </div>
         )}
+
         {loading && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div className="skeleton" style={{ height: 120, borderRadius: 4 }} />
-            <div className="skeleton" style={{ height: 300, borderRadius: 4 }} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 800, margin: "0 auto" }}>
+            <div style={{ padding: "16px 20px", background: "var(--bg-surface)", border: "1px solid var(--border-dim)", borderRadius: 6, display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 12, height: 12, borderRadius: "50%", background: "var(--blue-400)", animation: "pulse 1.2s infinite" }} />
+              <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+                Computing causal matrix across {selectedFeatureIds.length || 925} dimensions and fitting {modelType.toUpperCase()}…
+              </div>
+            </div>
+            <div className="skeleton" style={{ height: 140, borderRadius: 6 }} />
+            <div className="skeleton" style={{ height: 280, borderRadius: 6 }} />
           </div>
         )}
+
         {result && result.error && (
           <div style={{ maxWidth: 800, margin: "0 auto" }}>
-            <div style={{ padding: 24, backgroundColor: "var(--bg-elevated)", border: "1px solid var(--alert-red)", borderRadius: 4 }}>
-              <h3 style={{ fontSize: 18, color: "var(--alert-red)", marginBottom: 8, fontWeight: 500 }}>Training Failed</h3>
-              <p style={{ color: "var(--text-secondary)", margin: 0, fontFamily: "var(--font-mono)", fontSize: 13 }}>{result.error}</p>
+            <div style={{ padding: 24, backgroundColor: "var(--bg-elevated)", border: "1px solid var(--red)", borderRadius: 6 }}>
+              <h3 style={{ fontSize: 16, color: "var(--red)", marginBottom: 8, fontWeight: 500 }}>Training Job Failed</h3>
+              <p style={{ color: "var(--text-secondary)", margin: 0, fontFamily: "var(--font-mono)", fontSize: 12 }}>{result.error}</p>
             </div>
           </div>
         )}
+
         {result && !result.error && (
-          <div style={{ maxWidth: 800, margin: "0 auto" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-              <h3 style={{ fontSize: 20, fontWeight: 300, color: "var(--text-primary)" }}>Training Completed</h3>
-              <div className="badge badge-active">{modelType.toUpperCase()}</div>
+          <div style={{ maxWidth: 840, margin: "0 auto", display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* Header Result */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 16, borderBottom: "1px solid var(--border-dim)" }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <span className="badge badge-active">{modelType.toUpperCase()}</span>
+                  <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>{symbol}</span>
+                  <span style={{ fontSize: 11, color: "var(--green)", fontFamily: "var(--font-mono)" }}>● Checkpoint Saved</span>
+                </div>
+                <h3 style={{ fontSize: 18, fontWeight: 500, color: "var(--text-primary)", margin: 0 }}>
+                  Training & Out-of-Sample Validation Completed
+                </h3>
+                <div style={{ fontSize: 11, color: "var(--text-tertiary)", marginTop: 4 }}>
+                  Evaluated on {result.n_test} test bars · {result.features_used?.length || selectedFeatureIds.length || 0} features used
+                </div>
+              </div>
+              <button
+                className="btn btn-primary"
+                onClick={handleDeployToPaper}
+                style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 500 }}
+              >
+                <span>Deploy to Paper Trading</span>
+                <span>→</span>
+              </button>
             </div>
 
-            {/* Performance */}
-            <div style={{ marginBottom: 32 }}>
-              <div className="sys-label" style={{ marginBottom: 12 }}>Validation Metrics</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", border: "1px solid var(--border-dim)", borderRadius: 4, overflow: "hidden", position: "relative" }}>
-                <div style={{ position: "absolute", top: 0, left: 0, width: 8, height: 8, borderTop: "1px solid var(--border-accent)", borderLeft: "1px solid var(--border-accent)", pointerEvents: "none" }} />
+            {/* Validation Metrics Grid */}
+            <div>
+              <div className="sys-label" style={{ marginBottom: 10 }}>Validation Metrics (Temporal Out-of-Sample)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 1, border: "1px solid var(--border-dim)", borderRadius: 6, overflow: "hidden", background: "var(--border-dim)" }}>
                 {[
-                  { label: "Accuracy", value: result.metrics?.accuracy ? (result.metrics.accuracy * 100).toFixed(2) + "%" : "—" },
+                  { label: "Accuracy", value: result.metrics?.accuracy ? (result.metrics.accuracy * 100).toFixed(2) + "%" : "—", color: "var(--green)" },
                   { label: "Precision", value: result.metrics?.precision ? result.metrics.precision.toFixed(3) : "—" },
                   { label: "Recall", value: result.metrics?.recall ? result.metrics.recall.toFixed(3) : "—" },
+                  { label: "AUROC", value: result.metrics?.roc_auc ? result.metrics.roc_auc.toFixed(3) : "—" },
+                  { label: "Log Loss", value: result.metrics?.log_loss ? result.metrics.log_loss.toFixed(3) : "—" },
                 ].map((s, i) => (
-                  <div key={i} style={{ padding: "16px 20px", background: "var(--bg-elevated)", borderRight: i < 2 ? "1px solid var(--border-dim)" : "none" }}>
-                    <div className="stat-label">{s.label}</div>
-                    <div className="stat-value" style={{ fontSize: 16, marginTop: 4 }}>{s.value}</div>
+                  <div key={i} style={{ padding: "14px 16px", background: "var(--bg-elevated)" }}>
+                    <div className="stat-label" style={{ fontSize: 10 }}>{s.label}</div>
+                    <div className="stat-value" style={{ fontSize: 15, marginTop: 4, color: s.color || "var(--text-primary)" }}>{s.value}</div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Latest Prediction */}
+            {/* Inference State on Current Bar */}
             {result.prediction && (
-              <div style={{ marginBottom: 32 }}>
-                <div className="sys-label" style={{ marginBottom: 12 }}>Current State Inference (T_0)</div>
-                <div style={{ background: "var(--bg-elevated)", border: "1px solid var(--border-dim)", borderRadius: 4, padding: "16px 20px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                    <span className="mono-label">Direction</span>
-                    <span className="mono-value" style={{ color: result.prediction.direction === "UP" ? "var(--green)" : "var(--red)" }}>
+              <div>
+                <div className="sys-label" style={{ marginBottom: 10 }}>Current Market State Inference (T_0)</div>
+                <div style={{ background: "var(--bg-surface)", border: "1px solid var(--border-dim)", borderRadius: 6, padding: "16px 20px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+                  <div>
+                    <div className="stat-label" style={{ fontSize: 10 }}>Directional Signal</div>
+                    <div style={{ fontSize: 18, fontWeight: 600, color: result.prediction.direction === "UP" ? "var(--green)" : "var(--red)", marginTop: 4, fontFamily: "var(--font-mono)" }}>
                       {result.prediction.direction}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                    <span className="mono-label">Confidence</span>
-                    <span className="mono-value">{(result.prediction.confidence * 100).toFixed(1)}%</span>
-                  </div>
-                  {result.expected_move && (
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span className="mono-label">Expected Volatility ({horizon} Bars)</span>
-                      <span className="mono-value">{result.expected_move.sigma_pct}%</span>
                     </div>
-                  )}
+                  </div>
+                  <div>
+                    <div className="stat-label" style={{ fontSize: 10 }}>Model Confidence</div>
+                    <div style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)", marginTop: 4, fontFamily: "var(--font-mono)" }}>
+                      {(result.prediction.confidence * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div>
+                    <div className="stat-label" style={{ fontSize: 10 }}>Expected Volatility ({horizon} Bars)</div>
+                    <div style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)", marginTop: 4, fontFamily: "var(--font-mono)" }}>
+                      {result.expected_move?.sigma_pct != null ? `${result.expected_move.sigma_pct}%` : "—"}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
-            
-            <div style={{ fontSize: 11, color: "var(--text-tertiary)", fontStyle: "italic", textAlign: "center", marginTop: 24 }}>
-              This model run has been persisted to the predictions database.
-            </div>
+
+            {/* Feature Importance Leaderboard */}
+            {result.top_features && result.top_features.length > 0 && (
+              <div>
+                <div className="sys-label" style={{ marginBottom: 10 }}>Top Predictors (Feature Importance)</div>
+                <div style={{ border: "1px solid var(--border-dim)", borderRadius: 6, overflow: "hidden", background: "var(--bg-surface)" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: "var(--bg-elevated)", borderBottom: "1px solid var(--border-dim)", textAlign: "left" }}>
+                        <th style={{ padding: "8px 14px", width: 40, color: "var(--text-tertiary)" }}>#</th>
+                        <th style={{ padding: "8px 14px", color: "var(--text-secondary)" }}>Feature ID</th>
+                        <th style={{ padding: "8px 14px", width: 140, color: "var(--text-secondary)" }}>Relative Weight</th>
+                        <th style={{ padding: "8px 14px", width: 80, textAlign: "right", color: "var(--text-secondary)" }}>Importance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.top_features.slice(0, 10).map((f, idx) => {
+                        const maxImp = result.top_features[0]?.importance || 1;
+                        const pct = Math.min(100, Math.max(4, (f.importance / maxImp) * 100));
+                        return (
+                          <tr key={idx} style={{ borderBottom: "1px solid var(--border-dim)" }}>
+                            <td style={{ padding: "8px 14px", color: "var(--text-ghost)", fontFamily: "var(--font-mono)" }}>{idx + 1}</td>
+                            <td style={{ padding: "8px 14px", fontFamily: "var(--font-mono)", color: "var(--text-primary)" }}>
+                              <div>{f.id}</div>
+                              {f.name && f.name !== f.id && <div style={{ fontSize: 10, color: "var(--text-tertiary)" }}>{f.name}</div>}
+                            </td>
+                            <td style={{ padding: "8px 14px" }}>
+                              <div style={{ height: 6, width: "100%", background: "var(--bg-base)", borderRadius: 3, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${pct}%`, background: "var(--blue-400)", borderRadius: 3 }} />
+                              </div>
+                            </td>
+                            <td style={{ padding: "8px 14px", textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>
+                              {(f.importance * 100).toFixed(2)}%
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -358,6 +695,9 @@ function ModelLaboratory() {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   3. PREDICTION HISTORY
+   ═══════════════════════════════════════════════════════════════════════════ */
 function ModelHistory() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);

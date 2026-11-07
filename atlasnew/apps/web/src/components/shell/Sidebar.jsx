@@ -31,6 +31,13 @@ const NAV_GROUPS = [
     ],
   },
   {
+    label: "Derivatives",
+    items: [
+      { id: "derivatives-futures", label: "Futures Terminal",       icon: ZapIcon },
+      { id: "derivatives-options", label: "Options Vol Surface",    icon: ActivityIcon },
+    ],
+  },
+  {
     label: "System",
     items: [
       { id: "settings", label: "Settings", icon: SettingsIcon },

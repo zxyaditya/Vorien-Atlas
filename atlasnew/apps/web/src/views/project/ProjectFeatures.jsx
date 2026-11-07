@@ -64,8 +64,14 @@ export function FeatureRegistryPanel({ projectId, embedded = false }) {
     return () => abort();
   }, [selected, provider, symbol]);
 
-  const layers = [1, 2, 3, 4];
-  const LAYER_LABELS = { 1: "L1 Measurement", 2: "L2 Relationships", 3: "L3 Understanding", 4: "L4 Representation" };
+  const layers = [1, 2, 3, 4, 5];
+  const LAYER_LABELS = {
+    1: "L1 Measurement (612)",
+    2: "L2 Relationships (151)",
+    3: "L3 Regimes & Chaos (90)",
+    4: "L4 Representation (72)",
+    5: "L5 Derivatives: Futures & Options (114)"
+  };
 
   const filtered = features.filter(f => {
     if (filter.layer && String(f.layer) !== String(filter.layer)) return false;

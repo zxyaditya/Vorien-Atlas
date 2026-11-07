@@ -183,3 +183,8 @@ alpha_decay_script.py
 AGENTS.md
 .gemini/
 agentic_loops*
+
+# Runtime State & Cache
+*futures_paper_state.json
+*options_data_cache/
+screenshots/

@@ -173,7 +173,26 @@ All Atlas Core features are computed using 20 domain-neutral mathematical engine
 
 ---
 
-## 8. The Validation Framework
+## 8. Layer-5 Derivatives Domain Extensions (114 Features)
+
+Beyond the 925 core spot primitives in L1–L4, Atlas incorporates 114 specialized derivatives dimensions defined in `apps/api/derivatives_registry.py` and computed via `atlas_futures_core` and `atlas_options_core`:
+
+### 8.1 Futures & Perpetuals Features (69 features)
+- **Orderbook Microstructure (15 features):** Depth-weighted microprice, microprice-midpoint divergence, Level-1/5/10 bid-ask depth imbalance ratios, depth slope, weighted spread in basis points.
+- **Order Flow & Toxicity (12 features):** Volume-Synchronized Probability of Toxicity (VPIN 50 & 100 buckets), Cumulative Volume Delta (CVD), aggressive taker buy ratio, trade arrival intensity, large block taker frequency.
+- **Perpetual Funding & Carry (18 features):** 8-hour settlement funding rate, funding velocity ($d\text{Rate}/dt$), funding acceleration, funding 50-period Z-score, annualized carry APR, spot-perpetual basis spread.
+- **Open Interest & Liquidations (14 features):** Rolling OI delta, OI/Price divergence vectors, Top Trader Long/Short account ratio, Top Trader position ratio, estimated liquidation volume cascades.
+- **Intraday Volatility Dynamics (10 features):** High-frequency Parkinson volatility, Garman-Klass volatility, Yang-Zhang drift-independent estimator, intraday ATR ratio, return velocity and acceleration.
+
+### 8.2 Options Volatility Surface & Greeks (45 features)
+- **First-Order Greeks (10 features):** Black-Scholes Delta, Vega, Theta, Rho computed across strikes and expiries.
+- **Higher-Order Greeks (12 features):** Gamma (convexity), Vanna ($d\Delta/d\sigma$), Volga ($d\nu/d\sigma$), Charm ($d\Delta/dt$), Color ($d\Gamma/dt$), Speed ($d\Gamma/dS$).
+- **Volatility Surface Dynamics (11 features):** At-The-Money (ATM) Implied Volatility (30d, 60d, 90d), 25-Delta Risk Reversal (Put vs. Call skew), 25-Delta Butterfly (smile curvature / fat-tail pricing), Term Structure slope (Contango vs. Backwardation).
+- **Dealer Market Structure (12 features):** Net Dealer Gamma Exposure (GEX in $M), Net Dealer Vega Exposure (VEX), Gamma Flip Level (volatility transition boundary), Max Pain strike (expiration magnet pin), Options VPIN flow toxicity, Volatility Risk Premium (VRP = IV - RV).
+
+---
+
+## 9. The Validation Framework
 
 The Atlas Validation Framework (DEC-013) is an active subsystem that mathematically certifies features against rigorous criteria:
 

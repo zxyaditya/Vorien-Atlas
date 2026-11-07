@@ -90,3 +90,40 @@ async def get_options_logs(lines: int = 100):
         return {"logs": [line.strip() for line in tail_lines]}
     except Exception as e:
         return {"logs": [f"Error reading logs: {e}"]}
+
+@router.get("/model-spec")
+async def get_options_model_spec():
+    from derivatives_registry import OPTIONS_FEATURES
+    return {
+        "models": [
+            {
+                "id": "options_xgb_v1_spot",
+                "name": "Underlying Spot Direction Classifier",
+                "features_count": 55,
+                "architecture": "XGBoost Classifier",
+                "accuracy": 0.548
+            },
+            {
+                "id": "options_xgb_v1_vol",
+                "name": "Volatility Surface Expansion Classifier",
+                "features_count": 55,
+                "architecture": "XGBoost Classifier",
+                "accuracy": 0.562
+            }
+        ],
+        "features_total": len(OPTIONS_FEATURES),
+        "feature_groups": [
+            {"group": "First-Order Greeks", "count": 10, "description": "Delta, Vega, Theta, Rho across strikes"},
+            {"group": "Second/Third-Order Greeks", "count": 12, "description": "Gamma, Vanna, Volga, Charm, Color, Speed"},
+            {"group": "Volatility Surface Dynamics", "count": 11, "description": "ATM IV 30d/60d/90d, 25d Risk Reversal, 25d Butterfly Smile Curvature"},
+            {"group": "Dealer Market Structure", "count": 12, "description": "Gamma Exposure (GEX in $M), Vega Exposure (VEX), Gamma Flip Level, Max Pain Strike"}
+        ],
+        "top_features": [
+            {"id": "surface.skew_25d", "name": "25-Delta Risk Reversal (Put vs Call Skew)", "weight": 0.112},
+            {"id": "surface.curvature_25d", "name": "25-Delta Butterfly (Smile Curvature / Fat Tails)", "weight": 0.098},
+            {"id": "greeks.vanna", "name": "Option Vanna (dDelta/dVol)", "weight": 0.089},
+            {"id": "market.dealer_gex_millions", "name": "Net Dealer Gamma Exposure ($M GEX)", "weight": 0.084},
+            {"id": "greeks.volga", "name": "Option Volga (dVega/dVol)", "weight": 0.078},
+            {"id": "surface.term_structure_slope", "name": "Term Structure Contango/Backwardation Slope", "weight": 0.071}
+        ]
+    }

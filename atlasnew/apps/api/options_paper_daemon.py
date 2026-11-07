@@ -11,14 +11,17 @@ import sys
 import time
 import logging
 from datetime import datetime
+from pathlib import Path
 
-# Adjust path for standalone execution
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# ── Dynamic Path Resolution ──────────────────────────────────────────────────
+ROOT_DIR = Path(__file__).resolve().parent
+LIBS_PYTHON_DIR = ROOT_DIR.parent.parent / "libs" / "python"
+for p in [LIBS_PYTHON_DIR, ROOT_DIR]:
+    p_str = str(p)
+    if p_str not in sys.path:
+        sys.path.insert(0, p_str)
 
-from atlas_options_core.live.predictor import LivePredictor
-from atlas_options_core.live.paper_engine import LivePaperEngine
-from atlas_options_core.live.broadcaster import WebhookBroadcaster
-from options_learning_system.backtest.contracts import OptionsStrategyPolicy
+os.chdir(str(ROOT_DIR))
 
 # Setup terminal logger
 logging.basicConfig(
@@ -26,19 +29,38 @@ logging.basicConfig(
     format="%(asctime)s [%(name)s] [%(levelname)s] %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("options_paper_daemon.log")
+        logging.FileHandler(str(ROOT_DIR / "options_paper_daemon.log"), encoding="utf-8")
     ]
 )
 logger = logging.getLogger("PaperDaemon")
 
 # Configuration
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "options_learning_system", "artifacts")
-STATE_FILE = os.path.join(os.path.dirname(__file__), "options_data_cache", "paper_portfolio_state.json")
+def _find_options_model_dir() -> str:
+    candidates = [
+        LIBS_PYTHON_DIR / "options_learning_system" / "artifacts",
+        ROOT_DIR / "options_learning_system" / "artifacts",
+        Path.cwd() / "options_learning_system" / "artifacts",
+    ]
+    for c in candidates:
+        if (c / "options_xgb_v1_spot.pkl").exists():
+            return str(c)
+    return str(LIBS_PYTHON_DIR / "options_learning_system" / "artifacts")
+
+MODEL_DIR = _find_options_model_dir()
+CACHE_DIR = ROOT_DIR / "options_data_cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+STATE_FILE = str(CACHE_DIR / "paper_portfolio_state.json")
 
 
 def main():
     logger.info("Initializing Live Predictor (loading models)...")
+    logger.info(f"Model dir: {MODEL_DIR}")
     try:
+        from atlas_options_core.live.predictor import LivePredictor
+        from atlas_options_core.live.paper_engine import LivePaperEngine
+        from atlas_options_core.live.broadcaster import WebhookBroadcaster
+        from options_learning_system.backtest.contracts import OptionsStrategyPolicy
+
         predictor = LivePredictor(MODEL_DIR)
     except Exception as e:
         logger.error(f"Failed to initialize predictor. Ensure models are trained. Error: {e}")
@@ -60,39 +82,27 @@ def main():
     logger.info("=" * 60)
     logger.info("ATLAS OPTIONS PAPER TRADING DAEMON ONLINE")
     logger.info("=" * 60)
-    logger.info(f"Targeting Top of the Hour execution. Current time: {datetime.now()}")
+    logger.info(f"Targeting continuous execution. Current time: {datetime.now()}")
 
     # First run immediately to verify pipeline works
     logger.info("Running initial pipeline check...")
-    inference = predictor.predict()
-    engine.process_tick(inference)
-    logger.info("Initial check complete.")
+    try:
+        inference = predictor.predict()
+        engine.process_tick(inference)
+        logger.info("Initial check complete.")
+    except Exception as e:
+        logger.warning(f"Initial check non-fatal warning: {e}")
 
     while True:
-        now = datetime.now()
-        
-        # Calculate seconds until the top of the next hour
-        next_hour = now.replace(minute=0, second=0, microsecond=0)
-        from datetime import timedelta
-        next_hour = next_hour + timedelta(hours=1)
-        
-        sleep_seconds = (next_hour - now).total_seconds()
-        
-        logger.info(f"Sleeping for {sleep_seconds:.1f} seconds until {next_hour}...")
-        
-        # For the sake of the environment, if sleep is > 10s, we will just simulate continuous execution 
-        # (Since we are in a sandbox and can't actually wait an hour). 
-        # Real production would use time.sleep(sleep_seconds).
-        # We will sleep for 10 seconds and run a tick for demonstration purposes.
-        time.sleep(10) 
-        
-        logger.info("=" * 60)
-        logger.info(f"Waking up for scheduled execution: {datetime.now()}")
-        logger.info("=" * 60)
-        
         try:
+            # Sleeping 60s between ticks in paper mode for steady cadence
+            time.sleep(60) 
+            logger.info(f"Waking up for scheduled execution: {datetime.now()}")
             inference = predictor.predict()
             engine.process_tick(inference)
+        except KeyboardInterrupt:
+            logger.info("Options daemon stopped by user.")
+            break
         except Exception as e:
             logger.error(f"Error during execution cycle: {e}")
 

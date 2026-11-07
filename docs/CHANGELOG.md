@@ -5,10 +5,10 @@
 ---
 ## v1.0.1 · Open-Source Infrastructure Release (October 2026)
 
-**Theme**: Prepare Atlas for public release under PolyForm Noncommercial-1.0.0. Full forensic verification of features, mathematical ground-truth audit, elimination of local environment paths, and removal of artificial documentation padding.
+**Theme**: Prepare Atlas for public release under GNU AGPLv3. Full forensic verification of features, mathematical ground-truth audit, elimination of local environment paths, and removal of artificial documentation padding.
 
 ### Added
-- **`LICENSE`**: PolyForm Noncommercial-1.0.0 license (free for individual research, commercial license required for institutional funds).
+- **`LICENSE`**: GNU Affero General Public License v3.0 (AGPLv3) (free and open-source copyleft license, with commercial dual-licensing exemption available for proprietary trading firms).
 - **Audited Feature Registries**: Fully verified ground truth across 925 Atlas Core features (L1: 612, L2: 151, L3: 90, L4: 72) and 1,039 total platform features including perpetual swap derivatives (69) and options volatility surfaces (45).
 - **Portable Lake & Store Paths**: Transitioned all storage fallbacks in `atlas_data_lake.py` and `whale_hunter` to environment-variable-backed defaults with cross-platform home directory fallbacks (`~/.atlas/`).
 

@@ -173,14 +173,15 @@ We highly value your bug reports, feature suggestions, and contributions!
 
 ---
 
-## License & Dual Licensing
+## License & Commercial Licensing
 
-Vorien Atlas is dual-licensed under the **PolyForm Noncommercial License 1.0.0**:
+Vorien Atlas is free and open-source software licensed under the **[GNU Affero General Public License v3.0 (GNU AGPLv3)](./LICENSE)**:
 
-- **Personal, Academic & Research Use**: 100% Free to use, study, explore, modify, and build personal quantitative models.
-- **Commercial & Institutional Use**: Any deployment by hedge funds, proprietary trading firms, commercial enterprises, or for trading live capital for monetary compensation requires a commercial license agreement.
+- **Open Source (GNU AGPLv3)**: 100% Free to use, study, explore, modify, distribute, and contribute. In accordance with the AGPLv3 copyleft provisions, any modified versions or derivative works made accessible over a network must make their complete source code available under the same license.
+- **Commercial & Institutional Exemption**: If your organization, hedge fund, proprietary trading desk, or enterprise wishes to integrate Vorien Atlas into proprietary closed-source trading systems or deploy without being bound by AGPLv3 copyleft terms, commercial licenses and institutional support agreements are available.
 
-For institutional inquiries, enterprise licensing, or commercial clearance, please contact:  
+For commercial licensing, enterprise integration, or proprietary exemptions, please contact:  
 **Aditya Yadav** (`@zxyaditya`) — `adityakumar93416@gmail.com`
 
 See the full [LICENSE](./LICENSE) file for complete legal terms.
+

@@ -14,10 +14,10 @@ If you have ever tried building a quantitative trading strategy, you probably no
 
 Rather than telling you what to buy or sell, Atlas provides an institutional foundation to explore, measure, and model market dynamics with mathematical honesty:
 
-- 🔬 **Measures the Market from Over 1,000 Angles**: Computes **1,039 mathematical features** across Spot, Futures, and Options — measuring orderbook depth, trade flow, buyer/seller aggression, volatility waves, and options Greeks. Every formula is strictly **causal** (strictly backward-looking, zero lookahead bias).
-- 🛡️ **Prevents You From Fooling Yourself**: Built-in **Combinatorial Purged Cross-Validation (CPCV)** and **Triple Barrier event-driven labeling** guarantee your machine learning models are trained and tested without future leakage.
-- ⚙️ **Simulates Realistic Market Realities**: Event-driven backtesting simulates real exchange conditions: maker/taker commission tiers, volume-weighted adverse slippage, and execution queues.
-- 💻 **Frictionless Developer Experience**: Use Atlas as a lightweight Python library directly inside your Jupyter notebooks (`pip install -r requirements.txt`), or launch the local web terminal and FastAPI service to inspect orderbooks and paper-trade visually.
+-  **Measures the Market from Over 1,000 Angles**: Computes **1,039 mathematical features** across Spot, Futures, and Options — measuring orderbook depth, trade flow, buyer/seller aggression, volatility waves, and options Greeks. Every formula is strictly **causal** (strictly backward-looking, zero lookahead bias).
+-  **Prevents You From Fooling Yourself**: Built-in **Combinatorial Purged Cross-Validation (CPCV)** and **Triple Barrier event-driven labeling** guarantee your machine learning models are trained and tested without future leakage.
+-  **Simulates Realistic Market Realities**: Event-driven backtesting simulates real exchange conditions: maker/taker commission tiers, volume-weighted adverse slippage, and execution queues.
+-  **Frictionless Developer Experience**: Use Atlas as a lightweight Python library directly inside your Jupyter notebooks (`pip install -r requirements.txt`), or launch the local web terminal and FastAPI service to inspect orderbooks and paper-trade visually.
 
 ---
 

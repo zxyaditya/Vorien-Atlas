@@ -30,6 +30,8 @@ const NAV_GROUPS = [
       { id: "knowledge",         label: "Knowledge Archive",       icon: BookIcon },
     ],
   },
+  /*
+  // Temporary: Isolated to experimental/ until dynamic multi-asset selection is ready
   {
     label: "Derivatives",
     items: [
@@ -37,6 +39,7 @@ const NAV_GROUPS = [
       { id: "derivatives-options", label: "Options Vol Surface",    icon: ActivityIcon },
     ],
   },
+  */
   {
     label: "System",
     items: [

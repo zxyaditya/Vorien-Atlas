@@ -933,11 +933,12 @@ async def stat_arb_state():
 # ─── Daemon Process Registry ────────────────────────────────────────────
 import subprocess as _subprocess
 import sys as _sys
+_EXP_DIR = ROOT.parent.parent / "experimental" / "daemons"
 _DAEMON_SCRIPTS = {
     "stat-arb":     "stat_arb_daemon.py",
     "whale-hunter": "whale_hunter_daemon.py" if (ROOT / "whale_hunter_daemon.py").exists() else None,
-    "futures-paper": "futures_paper_daemon.py",
-    "options-paper": "options_paper_daemon.py",
+    "futures-paper": str(_EXP_DIR / "futures_paper_daemon.py") if (_EXP_DIR / "futures_paper_daemon.py").exists() else ("futures_paper_daemon.py" if (ROOT / "futures_paper_daemon.py").exists() else None),
+    "options-paper": str(_EXP_DIR / "options_paper_daemon.py") if (_EXP_DIR / "options_paper_daemon.py").exists() else ("options_paper_daemon.py" if (ROOT / "options_paper_daemon.py").exists() else None),
 }
 _daemon_procs: dict = {}
 @api.post("/daemons/{daemon_name}/toggle")
@@ -956,8 +957,9 @@ async def toggle_daemon(daemon_name: str, payload: dict):
         env = os.environ.copy()
         python_libs = str(ROOT.parent.parent / "libs" / "python")
         env["PYTHONPATH"] = f"{python_libs};{ROOT}" + (f";{env['PYTHONPATH']}" if "PYTHONPATH" in env else "")
+        script_target = str(script) if os.path.isabs(str(script)) else str(ROOT / script)
         proc = _subprocess.Popen(
-            [_sys.executable, str(ROOT / script)],
+            [_sys.executable, script_target],
             cwd=str(ROOT),
             env=env,
             stdout=_subprocess.DEVNULL,

@@ -27,8 +27,8 @@ import { ValidationView }      from "./views/ValidationView";
 import { MarketDataView }      from "./views/MarketDataView";
 import { ProjectPaperTrading } from "./views/project/ProjectPaperTrading";
 import { ProjectBacktests }    from "./views/project/ProjectBacktests";
-import { FuturesTerminalView } from "./views/FuturesTerminalView";
-import { OptionsTerminalView } from "./views/OptionsTerminalView";
+// import { FuturesTerminalView } from "./views/FuturesTerminalView";
+// import { OptionsTerminalView } from "./views/OptionsTerminalView";
 
 
 // Inject auth header into every axios request
@@ -78,8 +78,8 @@ function WorkspaceShell() {
       case "validation":        return <ValidationView />;
       case "market-snapshot":   return <MarketSnapshotView />;
       case "paper-trading":       return <ProjectPaperTrading />;
-      case "derivatives-futures": return <FuturesTerminalView />;
-      case "derivatives-options": return <OptionsTerminalView />;
+      // case "derivatives-futures": return <FuturesTerminalView />;
+      // case "derivatives-options": return <OptionsTerminalView />;
       case "backtests":           return <ProjectBacktests />;
       case "market-data":       return <MarketDataView />;
       case "knowledge":         return <KnowledgeView />;
